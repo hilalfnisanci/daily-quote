@@ -6,3 +6,14 @@ fetch('quotes.json')
     document.getElementById('quote-author').textContent = '— ' + quote.author;
     document.getElementById('loading-spinner').classList.add('hidden');
   });
+
+document.getElementById('copy-btn').addEventListener('click', function() {
+  var text = document.getElementById('quote-text').textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    var btn = document.getElementById('copy-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(function() {
+      btn.textContent = 'Copy to clipboard';
+    }, 2000);
+  });
+});
