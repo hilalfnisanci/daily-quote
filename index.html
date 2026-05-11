@@ -10,11 +10,28 @@
 </head>
 <body>
   <main>
-    <h1>Daily Quote</h1>
-    <div id="loading-spinner"></div>
-    <p id="quote-text"></p>
-    <p id="quote-author"></p>
-    <button id="copy-btn">Copy to clipboard</button>
+    <nav id="tab-nav">
+      <button class="tab-btn active" data-tab="daily">Daily Quote</button>
+      <button class="tab-btn" data-tab="favorites">My Favorites</button>
+    </nav>
+
+    <div id="view-daily">
+      <div id="daily-header">
+        <h1>Daily Quote</h1>
+        <button id="heart-btn" aria-label="Add to favorites" title="Toggle favorite">♡</button>
+      </div>
+      <div id="loading-spinner"></div>
+      <p id="quote-text"></p>
+      <p id="quote-author"></p>
+      <button id="copy-btn">Copy to clipboard</button>
+    </div>
+
+    <div id="view-favorites" class="hidden">
+      <h2>My Favorites</h2>
+      <p id="favorites-empty">No favorites yet. Click ♡ on a quote to save it here.</p>
+      <ul id="favorites-list"></ul>
+    </div>
+
     <footer>© 2026 Daily Quote</footer>
   </main>
   <script src="app.js"></script>
