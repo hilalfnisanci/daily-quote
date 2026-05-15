@@ -1,4 +1,85 @@
 var currentQuote = null;
+var allQuotes = [];
+var activeFilter = 'all';
+var viewStartTime = null;
+
+var CATEGORIES = ['motivation', 'success', 'wisdom', 'life', 'happiness'];
+
+var CATEGORY_KEYWORDS = {
+  motivation: ['dream', 'believe', 'go', 'do', 'take', 'action', 'try', 'work', 'strike', 'can', 'persist', 'keep', 'start', 'begin'],
+  success:    ['success', 'fail', 'failure', 'achieve', 'goal', 'win', 'courage', 'accomplish'],
+  wisdom:     ['wisdom', 'think', 'know', 'truth', 'mind', 'limit', 'doubt', 'examine', 'learn', 'knowledge', 'understand'],
+  life:       ['life', 'live', 'beauty', 'future', 'time', 'tree', 'today', 'tomorrow', 'moment'],
+  happiness:  ['happy', 'happiness', 'joy', 'smile', 'love', 'peace', 'content', 'gratitude']
+};
+
+function categorizeQuote(text) {
+  var lower = text.toLowerCase();
+  var best = 'wisdom';
+  var bestScore = 0;
+  CATEGORIES.forEach(function(cat) {
+    var score = CATEGORY_KEYWORDS[cat].filter(function(kw) {
+      return lower.indexOf(kw) !== -1;
+    }).length;
+    if (score > bestScore) { bestScore = score; best = cat; }
+  });
+  return best;
+}
+
+function getPreferences() {
+  try {
+    return JSON.parse(localStorage.getItem('quotePreferences') || '{}');
+  } catch(e) { return {}; }
+}
+
+function savePreferences(prefs) {
+  try { localStorage.setItem('quotePreferences', JSON.stringify(prefs)); } catch(e) {}
+}
+
+function recordCategorySignal(category, delta) {
+  var prefs = getPreferences();
+  if (!prefs.categoryScores) prefs.categoryScores = {};
+  prefs.categoryScores[category] = (prefs.categoryScores[category] || 0) + delta;
+  savePreferences(prefs);
+}
+
+function selectWeightedQuote(quotes) {
+  var prefs = getPreferences();
+  var scores = (prefs && prefs.categoryScores) || {};
+  var totalWeight = 0;
+  var weights = quotes.map(function(q) {
+    var w = 1 + ((scores[q.category] || 0) * 0.3);
+    totalWeight += w;
+    return w;
+  });
+  var rand = Math.random() * totalWeight;
+  var cumulative = 0;
+  for (var i = 0; i < quotes.length; i++) {
+    cumulative += weights[i];
+    if (rand <= cumulative) return quotes[i];
+  }
+  return quotes[quotes.length - 1];
+}
+
+function getFilteredQuotes() {
+  if (activeFilter === 'all') return allQuotes;
+  var filtered = allQuotes.filter(function(q) { return q.category === activeFilter; });
+  return filtered.length > 0 ? filtered : allQuotes;
+}
+
+function displayQuote(quotes) {
+  currentQuote = selectWeightedQuote(quotes);
+  document.getElementById('quote-text').textContent = currentQuote.text;
+  document.getElementById('quote-author').textContent = '— ' + currentQuote.author;
+
+  var catEl = document.getElementById('quote-category');
+  catEl.textContent = currentQuote.category;
+  catEl.classList.remove('hidden');
+
+  document.getElementById('loading-spinner').classList.add('hidden');
+  updateHeartBtn();
+  viewStartTime = Date.now();
+}
 
 function getFavorites() {
   try {
@@ -119,21 +200,36 @@ function switchTab(tab) {
   }
 }
 
-fetch('quotes.json')
-  .then(function(response) { return response.json(); })
-  .then(function(quotes) {
-    currentQuote = quotes[Math.floor(Math.random() * quotes.length)];
-    document.getElementById('quote-text').textContent = currentQuote.text;
-    document.getElementById('quote-author').textContent = '— ' + currentQuote.author;
-    document.getElementById('loading-spinner').classList.add('hidden');
-    updateHeartBtn();
+Promise.all([
+  fetch('quotes.json').then(function(r) { return r.json(); }),
+  fetch('quotes-categories.json').then(function(r) { return r.json(); }).catch(function() { return {}; })
+]).then(function(results) {
+  var quotes = results[0];
+  var categoryMap = results[1];
+
+  quotes.forEach(function(q) {
+    q.category = categoryMap[String(q.id)] || categorizeQuote(q.text);
   });
+
+  allQuotes = quotes;
+  displayQuote(getFilteredQuotes());
+});
+
+document.getElementById('category-select').addEventListener('change', function() {
+  activeFilter = this.value;
+  document.getElementById('loading-spinner').classList.remove('hidden');
+  document.getElementById('quote-category').classList.add('hidden');
+  displayQuote(getFilteredQuotes());
+});
 
 document.getElementById('copy-btn').addEventListener('click', function() {
   var text = document.getElementById('quote-text').textContent;
   navigator.clipboard.writeText(text).then(function() {
     var btn = document.getElementById('copy-btn');
     btn.textContent = 'Copied!';
+    if (currentQuote) {
+      recordCategorySignal(currentQuote.category, 2);
+    }
     setTimeout(function() {
       btn.textContent = 'Copy to clipboard';
     }, 2000);
@@ -146,4 +242,13 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {
     switchTab(btn.getAttribute('data-tab'));
   });
+});
+
+window.addEventListener('beforeunload', function() {
+  if (currentQuote && viewStartTime) {
+    var elapsed = (Date.now() - viewStartTime) / 1000;
+    if (elapsed >= 30) {
+      recordCategorySignal(currentQuote.category, 1);
+    }
+  }
 });

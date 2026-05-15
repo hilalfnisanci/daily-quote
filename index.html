@@ -20,8 +20,20 @@
         <h1>Daily Quote</h1>
         <button id="heart-btn" aria-label="Add to favorites" title="Toggle favorite">♡</button>
       </div>
+      <div id="category-filter">
+        <label for="category-select" class="sr-only">Filter by category</label>
+        <select id="category-select">
+          <option value="all">All categories</option>
+          <option value="motivation">Motivation</option>
+          <option value="success">Success</option>
+          <option value="wisdom">Wisdom</option>
+          <option value="life">Life</option>
+          <option value="happiness">Happiness</option>
+        </select>
+      </div>
       <div id="loading-spinner"></div>
       <p id="quote-text"></p>
+      <span id="quote-category" class="hidden"></span>
       <p id="quote-author"></p>
       <button id="copy-btn">Copy to clipboard</button>
     </div>
