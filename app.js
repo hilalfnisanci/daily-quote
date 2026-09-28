@@ -252,3 +252,5 @@ window.addEventListener('beforeunload', function() {
     }
   }
 });
+
+document.getElementById('footer-year').textContent = new Date().getFullYear();
