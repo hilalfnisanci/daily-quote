@@ -244,6 +244,8 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
   });
 });
 
+document.getElementById('footer-year').textContent = new Date().getFullYear();
+
 window.addEventListener('beforeunload', function() {
   if (currentQuote && viewStartTime) {
     var elapsed = (Date.now() - viewStartTime) / 1000;
