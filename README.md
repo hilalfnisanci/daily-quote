@@ -1,6 +1,15 @@
 # Daily Quote
 
-A simple webpage displaying daily motivational quotes.
+A simple webpage displaying daily motivational quotes. Every visit picks a quote at
+random from a curated collection in `quotes.json`, so the page always opens with
+something new. Selection is weighted by the categories you interact with, so the
+quotes you see gradually match your taste.
+
+Quotes you like can be saved to favorites, searched, filtered by category, and moved
+between browsers as a JSON file. Everything you save lives in your browser's
+`localStorage` — there is no backend, no account, and no data leaves your machine.
+The whole app is plain HTML, CSS, and JavaScript with no build step or dependencies,
+so it runs from any static host.
 
 ## Features
 
