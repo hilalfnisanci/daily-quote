@@ -1,29 +1,16 @@
+var QL = window.QuoteLogic;
+
 var currentQuote = null;
 var allQuotes = [];
 var activeFilter = 'all';
 var viewStartTime = null;
+var favoritesSearch = '';
+var favoritesCategory = 'all';
 
-var CATEGORIES = ['motivation', 'success', 'wisdom', 'life', 'happiness'];
-
-var CATEGORY_KEYWORDS = {
-  motivation: ['dream', 'believe', 'go', 'do', 'take', 'action', 'try', 'work', 'strike', 'can', 'persist', 'keep', 'start', 'begin'],
-  success:    ['success', 'fail', 'failure', 'achieve', 'goal', 'win', 'courage', 'accomplish'],
-  wisdom:     ['wisdom', 'think', 'know', 'truth', 'mind', 'limit', 'doubt', 'examine', 'learn', 'knowledge', 'understand'],
-  life:       ['life', 'live', 'beauty', 'future', 'time', 'tree', 'today', 'tomorrow', 'moment'],
-  happiness:  ['happy', 'happiness', 'joy', 'smile', 'love', 'peace', 'content', 'gratitude']
-};
+var CATEGORIES = QL.CATEGORIES;
 
 function categorizeQuote(text) {
-  var lower = text.toLowerCase();
-  var best = 'wisdom';
-  var bestScore = 0;
-  CATEGORIES.forEach(function(cat) {
-    var score = CATEGORY_KEYWORDS[cat].filter(function(kw) {
-      return lower.indexOf(kw) !== -1;
-    }).length;
-    if (score > bestScore) { bestScore = score; best = cat; }
-  });
-  return best;
+  return QL.categorizeQuote(text);
 }
 
 function getPreferences() {
@@ -45,20 +32,7 @@ function recordCategorySignal(category, delta) {
 
 function selectWeightedQuote(quotes) {
   var prefs = getPreferences();
-  var scores = (prefs && prefs.categoryScores) || {};
-  var totalWeight = 0;
-  var weights = quotes.map(function(q) {
-    var w = 1 + ((scores[q.category] || 0) * 0.3);
-    totalWeight += w;
-    return w;
-  });
-  var rand = Math.random() * totalWeight;
-  var cumulative = 0;
-  for (var i = 0; i < quotes.length; i++) {
-    cumulative += weights[i];
-    if (rand <= cumulative) return quotes[i];
-  }
-  return quotes[quotes.length - 1];
+  return QL.selectWeightedQuote(quotes, (prefs && prefs.categoryScores) || {});
 }
 
 function getFilteredQuotes() {
@@ -67,8 +41,79 @@ function getFilteredQuotes() {
   return filtered.length > 0 ? filtered : allQuotes;
 }
 
+// --- History ---------------------------------------------------------------
+
+function getHistory() {
+  try {
+    var parsed = JSON.parse(localStorage.getItem('quoteHistory') || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveHistory(history) {
+  try { localStorage.setItem('quoteHistory', JSON.stringify(history)); } catch (e) {}
+}
+
+function recordHistory(quote) {
+  saveHistory(QL.addHistoryEntry(getHistory(), quote, new Date()));
+}
+
+function formatHistoryDate(dateKey) {
+  var d = new Date(dateKey + 'T00:00:00');
+  if (isNaN(d.getTime())) return dateKey;
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function renderHistory() {
+  var groups = QL.groupHistoryByDate(getHistory());
+  var container = document.getElementById('history-groups');
+  var empty = document.getElementById('history-empty');
+
+  container.innerHTML = '';
+
+  if (groups.length === 0) {
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  groups.forEach(function(group) {
+    var section = document.createElement('section');
+    section.className = 'history-group';
+
+    var heading = document.createElement('h3');
+    heading.className = 'history-date';
+    heading.textContent = formatHistoryDate(group.date);
+    section.appendChild(heading);
+
+    var ul = document.createElement('ul');
+    ul.className = 'history-list';
+    group.entries.forEach(function(entry) {
+      var li = document.createElement('li');
+      li.className = 'history-item';
+
+      var textEl = document.createElement('p');
+      textEl.className = 'history-text';
+      textEl.textContent = entry.text;
+
+      var authorEl = document.createElement('p');
+      authorEl.className = 'history-author';
+      authorEl.textContent = '— ' + entry.author;
+
+      li.appendChild(textEl);
+      li.appendChild(authorEl);
+      ul.appendChild(li);
+    });
+    section.appendChild(ul);
+    container.appendChild(section);
+  });
+}
+
 function displayQuote(quotes) {
   currentQuote = selectWeightedQuote(quotes);
+  if (!currentQuote) return;
   document.getElementById('quote-text').textContent = currentQuote.text;
   document.getElementById('quote-author').textContent = '— ' + currentQuote.author;
 
@@ -78,12 +123,16 @@ function displayQuote(quotes) {
 
   document.getElementById('loading-spinner').classList.add('hidden');
   updateHeartBtn();
+  recordHistory(currentQuote);
   viewStartTime = Date.now();
 }
 
+// --- Favorites -------------------------------------------------------------
+
 function getFavorites() {
   try {
-    return JSON.parse(localStorage.getItem('favorites') || '[]');
+    var parsed = JSON.parse(localStorage.getItem('favorites') || '[]');
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     return [];
   }
@@ -129,7 +178,12 @@ function toggleFavorite() {
   if (index >= 0) {
     favorites.splice(index, 1);
   } else {
-    favorites.push({ id: currentQuote.id, text: currentQuote.text, author: currentQuote.author });
+    favorites.push({
+      id: currentQuote.id,
+      text: currentQuote.text,
+      author: currentQuote.author,
+      category: currentQuote.category
+    });
   }
   saveFavorites(favorites);
   updateHeartBtn();
@@ -143,21 +197,51 @@ function removeFavorite(id) {
   updateHeartBtn();
 }
 
+function setImportStatus(message, isError) {
+  var el = document.getElementById('import-status');
+  el.textContent = message || '';
+  el.classList.toggle('error', !!isError);
+  el.classList.toggle('hidden', !message);
+}
+
+function renderCategoryChips() {
+  var container = document.getElementById('favorites-chips');
+  container.innerHTML = '';
+  var options = ['all'].concat(CATEGORIES);
+  options.forEach(function(cat) {
+    var chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip' + (favoritesCategory === cat ? ' active' : '');
+    chip.textContent = cat === 'all' ? 'All' : cat;
+    chip.setAttribute('aria-pressed', favoritesCategory === cat ? 'true' : 'false');
+    chip.addEventListener('click', function() {
+      favoritesCategory = cat;
+      renderFavorites();
+    });
+    container.appendChild(chip);
+  });
+}
+
 function renderFavorites() {
   var favorites = getFavorites();
+  var visible = QL.filterFavorites(favorites, favoritesSearch, favoritesCategory);
   var list = document.getElementById('favorites-list');
   var empty = document.getElementById('favorites-empty');
 
+  renderCategoryChips();
   list.innerHTML = '';
 
-  if (favorites.length === 0) {
+  if (visible.length === 0) {
+    empty.textContent = favorites.length === 0
+      ? 'No favorites yet. Click ♡ on a quote to save it here.'
+      : 'No favorites match your search.';
     empty.classList.remove('hidden');
     return;
   }
 
   empty.classList.add('hidden');
 
-  favorites.forEach(function(quote) {
+  visible.forEach(function(quote) {
     var li = document.createElement('li');
     li.className = 'favorite-item';
 
@@ -182,22 +266,60 @@ function renderFavorites() {
   });
 }
 
+function exportFavorites() {
+  var favorites = getFavorites();
+  if (favorites.length === 0) {
+    setImportStatus('There are no favorites to export yet.', true);
+    return;
+  }
+  var blob = new Blob([JSON.stringify(favorites, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement('a');
+  link.href = url;
+  link.download = 'daily-quote-favorites.json';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  setImportStatus('Exported ' + favorites.length + ' favorite(s).', false);
+}
+
+function importFavoritesFromText(rawText) {
+  var result = QL.validateFavoritesImport(rawText);
+  if (!result.ok) {
+    setImportStatus(result.error, true);
+    return;
+  }
+  var merged = QL.mergeFavorites(getFavorites(), result.favorites);
+  saveFavorites(merged.favorites);
+  renderFavorites();
+  updateHeartBtn();
+  setImportStatus('Imported ' + merged.added + ' new favorite(s), skipped ' + merged.skipped + ' duplicate(s).', false);
+}
+
+function handleImportFile(file) {
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function() { importFavoritesFromText(String(reader.result)); };
+  reader.onerror = function() { setImportStatus('The file could not be read.', true); };
+  reader.readAsText(file);
+}
+
+// --- Tabs ------------------------------------------------------------------
+
+var VIEWS = { daily: 'view-daily', favorites: 'view-favorites', history: 'view-history' };
+
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(function(btn) {
     btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
   });
 
-  var viewDaily = document.getElementById('view-daily');
-  var viewFavorites = document.getElementById('view-favorites');
+  Object.keys(VIEWS).forEach(function(key) {
+    document.getElementById(VIEWS[key]).classList.toggle('hidden', key !== tab);
+  });
 
-  if (tab === 'daily') {
-    viewDaily.classList.remove('hidden');
-    viewFavorites.classList.add('hidden');
-  } else {
-    viewDaily.classList.add('hidden');
-    viewFavorites.classList.remove('hidden');
-    renderFavorites();
-  }
+  if (tab === 'favorites') renderFavorites();
+  if (tab === 'history') renderHistory();
 }
 
 Promise.all([
@@ -237,6 +359,22 @@ document.getElementById('copy-btn').addEventListener('click', function() {
 });
 
 document.getElementById('heart-btn').addEventListener('click', toggleFavorite);
+
+document.getElementById('favorites-search').addEventListener('input', function() {
+  favoritesSearch = this.value;
+  renderFavorites();
+});
+
+document.getElementById('export-btn').addEventListener('click', exportFavorites);
+
+document.getElementById('import-btn').addEventListener('click', function() {
+  document.getElementById('import-input').click();
+});
+
+document.getElementById('import-input').addEventListener('change', function() {
+  handleImportFile(this.files && this.files[0]);
+  this.value = '';
+});
 
 document.querySelectorAll('.tab-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {

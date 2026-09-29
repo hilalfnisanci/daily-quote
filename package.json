@@ -1,0 +1,9 @@
+{
+  "name": "daily-quote",
+  "version": "1.0.0",
+  "description": "A simple webpage displaying daily motivational quotes.",
+  "private": true,
+  "scripts": {
+    "test": "node --test"
+  }
+}

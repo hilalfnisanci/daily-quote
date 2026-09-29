@@ -13,6 +13,7 @@
     <nav id="tab-nav">
       <button class="tab-btn active" data-tab="daily">Daily Quote</button>
       <button class="tab-btn" data-tab="favorites">My Favorites</button>
+      <button class="tab-btn" data-tab="history">History</button>
     </nav>
 
     <div id="view-daily">
@@ -40,12 +41,31 @@
 
     <div id="view-favorites" class="hidden">
       <h2>My Favorites</h2>
+      <div id="favorites-controls">
+        <label for="favorites-search" class="sr-only">Search favorites</label>
+        <input type="search" id="favorites-search" placeholder="Search text or author…" autocomplete="off">
+        <div id="favorites-chips" class="chip-row"></div>
+        <div id="favorites-actions">
+          <button id="export-btn" type="button">Export JSON</button>
+          <button id="import-btn" type="button">Import JSON</button>
+          <input type="file" id="import-input" accept="application/json,.json" class="hidden-input">
+        </div>
+        <p id="import-status" class="hidden" role="status" aria-live="polite"></p>
+      </div>
       <p id="favorites-empty">No favorites yet. Click ♡ on a quote to save it here.</p>
       <ul id="favorites-list"></ul>
     </div>
 
+    <div id="view-history" class="hidden">
+      <h2>History</h2>
+      <p class="view-hint">Quotes you have seen over the last 30 days.</p>
+      <p id="history-empty" class="hidden">No history yet. Quotes appear here once you view them.</p>
+      <div id="history-groups"></div>
+    </div>
+
     <footer>© <span id="footer-year"></span> Daily Quote</footer>
   </main>
+  <script src="quote-logic.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
