@@ -47,7 +47,9 @@
       totalWeight += w;
       return w;
     });
-    if (totalWeight <= 0) return quotes[0];
+    // Every quote was clamped to zero: no quote is preferred, so fall back to
+    // a uniform pick rather than always returning the first one.
+    if (totalWeight <= 0) return quotes[Math.floor(rnd() * quotes.length)] || quotes[quotes.length - 1];
     var rand = rnd() * totalWeight;
     var cumulative = 0;
     for (var i = 0; i < quotes.length; i++) {
@@ -136,6 +138,24 @@
     });
   }
 
+  // Favorites saved before categories existed have no `category` field, which
+  // would hide them behind every chip except "All". Fill those in using the
+  // same categorizer the daily quote uses.
+  function backfillFavoriteCategories(favorites, categorize) {
+    var fn = categorize || categorizeQuote;
+    var changed = false;
+    var result = (favorites || []).map(function(f) {
+      if (!f) return f;
+      if (f.category && CATEGORIES.indexOf(f.category) !== -1) return f;
+      changed = true;
+      var copy = {};
+      Object.keys(f).forEach(function(k) { copy[k] = f[k]; });
+      copy.category = fn(f.text);
+      return copy;
+    }).filter(Boolean);
+    return { favorites: result, changed: changed };
+  }
+
   // Validates raw JSON text from an imported file.
   // Returns { ok: true, favorites: [...] } or { ok: false, error: '<human message>' }.
   function validateFavoritesImport(rawText) {
@@ -205,6 +225,7 @@
     addHistoryEntry: addHistoryEntry,
     groupHistoryByDate: groupHistoryByDate,
     filterFavorites: filterFavorites,
+    backfillFavoriteCategories: backfillFavoriteCategories,
     validateFavoritesImport: validateFavoritesImport,
     mergeFavorites: mergeFavorites
   };

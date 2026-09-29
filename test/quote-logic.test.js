@@ -45,15 +45,47 @@ test.describe('selectWeightedQuote', function() {
     assert.strictEqual(picked.id, 2);
   });
 
-  test.it('falls back to the first quote when every weight is zero', function() {
-    var single = [{ id: 9, text: 'Q', author: 'A', category: 'life' }];
-    var picked = QL.selectWeightedQuote(single, { life: -1000 }, function() { return 0.5; });
-    assert.strictEqual(picked.id, 9);
+  test.it('falls back to a uniform pick when every weight is zero', function() {
+    var all = [
+      { id: 9, text: 'Q', author: 'A', category: 'life' },
+      { id: 10, text: 'R', author: 'B', category: 'life' }
+    ];
+    assert.strictEqual(QL.selectWeightedQuote(all, { life: -1000 }, function() { return 0; }).id, 9);
+    assert.strictEqual(QL.selectWeightedQuote(all, { life: -1000 }, function() { return 0.9; }).id, 10);
   });
 
   test.it('treats a missing score map as neutral', function() {
     var picked = QL.selectWeightedQuote(QUOTES, undefined, function() { return 0.5; });
     assert.strictEqual(picked.id, 2);
+  });
+});
+
+test.describe('favorite category backfill', function() {
+  test.it('fills in a missing category from the quote text', function() {
+    var legacy = [{ id: 1, text: 'Success comes from hard work and effort', author: 'A' }];
+    var result = QL.backfillFavoriteCategories(legacy);
+    assert.strictEqual(result.changed, true);
+    assert.ok(result.favorites[0].category);
+    assert.strictEqual(legacy[0].category, undefined, 'input must not be mutated');
+  });
+
+  test.it('replaces an unknown category value', function() {
+    var result = QL.backfillFavoriteCategories([{ id: 1, text: 'Q', author: 'A', category: 'bogus' }]);
+    assert.strictEqual(result.changed, true);
+    assert.notStrictEqual(result.favorites[0].category, 'bogus');
+  });
+
+  test.it('leaves valid categories untouched and reports no change', function() {
+    var favorites = [{ id: 1, text: 'Q', author: 'A', category: 'wisdom' }];
+    var result = QL.backfillFavoriteCategories(favorites);
+    assert.strictEqual(result.changed, false);
+    assert.strictEqual(result.favorites[0], favorites[0]);
+  });
+
+  test.it('drops null entries and handles an empty list', function() {
+    assert.deepStrictEqual(QL.backfillFavoriteCategories([]).favorites, []);
+    assert.deepStrictEqual(QL.backfillFavoriteCategories(null).favorites, []);
+    assert.strictEqual(QL.backfillFavoriteCategories([null]).favorites.length, 0);
   });
 });
 

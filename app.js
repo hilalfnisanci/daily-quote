@@ -141,8 +141,9 @@ function getFavorites() {
 function saveFavorites(favorites) {
   try {
     localStorage.setItem('favorites', JSON.stringify(favorites));
+    return true;
   } catch (e) {
-    // localStorage unavailable or full
+    return false;
   }
 }
 
@@ -197,21 +198,31 @@ function removeFavorite(id) {
   updateHeartBtn();
 }
 
-function setImportStatus(message, isError) {
+function setTransferStatus(message, isError) {
   var el = document.getElementById('import-status');
   el.textContent = message || '';
   el.classList.toggle('error', !!isError);
   el.classList.toggle('hidden', !message);
 }
 
+// Chips are built once; later renders only refresh the active state so a chip
+// (or the search box) never loses keyboard focus mid-interaction.
 function renderCategoryChips() {
   var container = document.getElementById('favorites-chips');
-  container.innerHTML = '';
+  if (container.childElementCount > 0) {
+    Array.prototype.forEach.call(container.children, function(chip) {
+      var active = chip.dataset.category === favoritesCategory;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+    return;
+  }
   var options = ['all'].concat(CATEGORIES);
   options.forEach(function(cat) {
     var chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'chip' + (favoritesCategory === cat ? ' active' : '');
+    chip.dataset.category = cat;
     chip.textContent = cat === 'all' ? 'All' : cat;
     chip.setAttribute('aria-pressed', favoritesCategory === cat ? 'true' : 'false');
     chip.addEventListener('click', function() {
@@ -224,6 +235,13 @@ function renderCategoryChips() {
 
 function renderFavorites() {
   var favorites = getFavorites();
+  // Migrate legacy favorites that predate the category field, then persist so
+  // the work happens only once.
+  var backfilled = QL.backfillFavoriteCategories(favorites);
+  if (backfilled.changed) {
+    favorites = backfilled.favorites;
+    saveFavorites(favorites);
+  }
   var visible = QL.filterFavorites(favorites, favoritesSearch, favoritesCategory);
   var list = document.getElementById('favorites-list');
   var empty = document.getElementById('favorites-empty');
@@ -269,7 +287,7 @@ function renderFavorites() {
 function exportFavorites() {
   var favorites = getFavorites();
   if (favorites.length === 0) {
-    setImportStatus('There are no favorites to export yet.', true);
+    setTransferStatus('There are no favorites to export yet.', true);
     return;
   }
   var blob = new Blob([JSON.stringify(favorites, null, 2)], { type: 'application/json' });
@@ -281,27 +299,30 @@ function exportFavorites() {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
-  setImportStatus('Exported ' + favorites.length + ' favorite(s).', false);
+  setTransferStatus('Exported ' + favorites.length + ' favorite(s).', false);
 }
 
 function importFavoritesFromText(rawText) {
   var result = QL.validateFavoritesImport(rawText);
   if (!result.ok) {
-    setImportStatus(result.error, true);
+    setTransferStatus(result.error, true);
     return;
   }
   var merged = QL.mergeFavorites(getFavorites(), result.favorites);
-  saveFavorites(merged.favorites);
+  if (!saveFavorites(merged.favorites)) {
+    setTransferStatus('Could not save the imported favorites: browser storage is full or unavailable.', true);
+    return;
+  }
   renderFavorites();
   updateHeartBtn();
-  setImportStatus('Imported ' + merged.added + ' new favorite(s), skipped ' + merged.skipped + ' duplicate(s).', false);
+  setTransferStatus('Imported ' + merged.added + ' new favorite(s), skipped ' + merged.skipped + ' duplicate(s).', false);
 }
 
 function handleImportFile(file) {
   if (!file) return;
   var reader = new FileReader();
   reader.onload = function() { importFavoritesFromText(String(reader.result)); };
-  reader.onerror = function() { setImportStatus('The file could not be read.', true); };
+  reader.onerror = function() { setTransferStatus('The file could not be read.', true); };
   reader.readAsText(file);
 }
 
